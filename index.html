@@ -53,6 +53,13 @@
   .boat-bg { position:absolute; right:-24px; bottom:26px; width:300px; opacity:0.20; pointer-events:none; }
   .boat-bg svg { width:100%; height:auto; display:block; }
   .brand { display:flex; align-items:center; gap:14px; position:relative; z-index:2; }
+  .refresh { margin-left:auto; width:42px; height:42px; flex-shrink:0; border:1px solid rgba(255,119,189,0.4);
+    background:rgba(255,255,255,0.08); border-radius:12px; color:#fff; cursor:pointer;
+    display:grid; place-items:center; transition:background 0.2s, transform 0.4s; -webkit-tap-highlight-color:transparent; }
+  .refresh:active { background:rgba(255,119,189,0.25); }
+  .refresh svg { width:22px; height:22px; }
+  .refresh.spin svg { animation:spin 0.6s ease; }
+  @keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
   .anchor { width:54px; height:40px; flex-shrink:0; background:rgba(255,255,255,0.08); border:1px solid rgba(255,119,189,0.4); border-radius:12px;
     display:grid; place-items:center; padding:5px 6px; box-shadow:0 6px 18px rgba(28,57,187,0.4); }
   .anchor svg { width:100%; height:auto; }
@@ -185,7 +192,8 @@ const CREW = ["Pavlo","Moritz","David","Jonas","Philipp"];
 let sb = null;
 let entries = [];
 let curType = "trip";
-let curPerson = CREW[0];
+let curPerson = CREW[0];          // für Tanken (eine Person zahlt)
+let curCrew = new Set([CREW[0]]); // für Fahrt (mehrere möglich)
 let liveOk = false;
 
 const $ = id => document.getElementById(id);
@@ -225,6 +233,9 @@ const APP_HTML = `
 <header>
   <div class="brand">
     <div><h1><b>Boob</b>Log</h1><div class="sub">Draco 1800 ST</div></div>
+    <button class="refresh" id="refreshBtn" title="Aktualisieren" aria-label="Aktualisieren">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    </button>
   </div>
   <div class="meter">
     <div><div class="label">Aktueller Betriebsstundenzähler</div></div>
@@ -245,7 +256,7 @@ const APP_HTML = `
         <div class="pill sel" data-type="trip">🚤 Fahrt</div>
         <div class="pill" data-type="fuel">⛽ Getankt</div>
       </div>
-      <label>Wer?</label>
+      <label id="whoLabel">Wer war an Bord?</label>
       <div class="pills" id="skipperPills"></div>
       <div id="tripFields">
         <div class="row">
@@ -295,6 +306,19 @@ function lastMeter(){
   const t = entries.filter(e=>e.type==="trip").sort((a,b)=>a.end_h-b.end_h);
   return t.length ? t[t.length-1].end_h : 0;
 }
+// Start-Feld am aktuellen Betriebsstundenzähler (oben) ausrichten.
+// Nur vorbefüllen, wenn der Nutzer das Feld nicht gerade selbst bearbeitet hat.
+function syncStartFromMeter(force){
+  const el=$("hStart"); if(!el) return;
+  if(curType!=="trip") return;
+  const m=lastMeter();
+  // Wenn das Feld leer ist, der Nutzer es nicht angefasst hat, oder force=true -> setzen
+  if(force || !el.dataset.touched){
+    if(m>0){ el.value=fmtPlain(m); el.placeholder=""; }
+    else { el.value=""; el.placeholder="z.B. 312 (akt. Motorstand)"; }
+    recalcTrip();
+  }
+}
 function setType(t){
   curType=t;
   document.querySelectorAll("#typeToggle .pill").forEach(p=>p.classList.toggle("sel",p.dataset.type===t));
@@ -302,13 +326,14 @@ function setType(t){
   $("fuelFields").style.display = t==="fuel"?"block":"none";
   $("addTitle").textContent = t==="trip"?"Neue Fahrt":"Getankt";
   $("addHint").textContent = t==="trip"
-    ? "Zählerstand am Ende der Fahrt eintragen – der Rest rechnet sich selbst."
+    ? "Wer war an Bord? Mehrere antippen – die Stunden werden gleichmäßig geteilt."
     : "Wer hat getankt und wie viel bezahlt? Das ist sein Guthaben.";
+  $("whoLabel").textContent = t==="trip" ? "Wer war an Bord?" : "Wer?";
+  buildPills();
   if(t==="trip"){
-    const m=lastMeter();
-    if(m>0){ $("hStart").value=fmtPlain(m); $("hStart").placeholder=""; }
-    else { $("hStart").value=""; $("hStart").placeholder="z.B. 312 (akt. Motorstand)"; }
-    recalcTrip();
+    // beim Moduswechsel zu Fahrt immer frisch vom Zähler übernehmen
+    const el=$("hStart"); if(el) delete el.dataset.touched;
+    syncStartFromMeter(true);
   }
 }
 function recalcTrip(){
@@ -320,11 +345,23 @@ function recalcTrip(){
 }
 function buildPills(){
   const host=$("skipperPills");
-  host.innerHTML=CREW.map((p,i)=>`<div class="pill ${i===0?'sel':''}" data-person="${p}">${p}</div>`).join("");
-  host.querySelectorAll(".pill").forEach(pl=>pl.onclick=()=>{
-    host.querySelectorAll(".pill").forEach(x=>x.classList.remove("sel"));
-    pl.classList.add("sel"); curPerson=pl.dataset.person;
-  });
+  if(curType==="trip"){
+    // Mehrfachauswahl: alle in curCrew sind markiert
+    host.innerHTML=CREW.map(p=>`<div class="pill ${curCrew.has(p)?'sel':''}" data-person="${p}">${p}</div>`).join("");
+    host.querySelectorAll(".pill").forEach(pl=>pl.onclick=()=>{
+      const p=pl.dataset.person;
+      if(curCrew.has(p)){ if(curCrew.size>1) curCrew.delete(p); } // mind. 1 muss bleiben
+      else curCrew.add(p);
+      pl.classList.toggle("sel", curCrew.has(p));
+    });
+  } else {
+    // Einfachauswahl: nur curPerson markiert
+    host.innerHTML=CREW.map(p=>`<div class="pill ${p===curPerson?'sel':''}" data-person="${p}">${p}</div>`).join("");
+    host.querySelectorAll(".pill").forEach(pl=>pl.onclick=()=>{
+      host.querySelectorAll(".pill").forEach(x=>x.classList.remove("sel"));
+      pl.classList.add("sel"); curPerson=pl.dataset.person;
+    });
+  }
 }
 
 /* ---------- DATA: Supabase ---------- */
@@ -358,8 +395,10 @@ async function save(){
   if(curType==="trip"){
     const s=parseFloat($("hStart").value)||0, e=parseFloat($("hEnd").value);
     if(isNaN(e)||e<=s){ toast("Bitte gültigen Endstand eingeben"); $("saveBtn").disabled=false; return; }
-    ok=await addTrip(curPerson,s,e,date);
-    if(ok) toast("🚤 Fahrt gespeichert");
+    // Crew in fester CREW-Reihenfolge als Liste speichern
+    const crewList = CREW.filter(p=>curCrew.has(p)).join(", ");
+    ok=await addTrip(crewList,s,e,date);
+    if(ok) toast(curCrew.size>1 ? "🚤 Fahrt gespeichert ("+curCrew.size+" an Bord)" : "🚤 Fahrt gespeichert");
   } else {
     const l=parseFloat($("fLiter").value)||0, eur=parseFloat($("fEur").value);
     if(isNaN(eur)||eur<=0){ toast("Bitte Betrag eingeben"); $("saveBtn").disabled=false; return; }
@@ -378,10 +417,16 @@ function renderLog(){
   host.innerHTML=entries.map(e=>{
     if(e.type==="trip"){
       const d=e.end_h-e.start_h;
+      const crew=parsePeople(e.person);
+      const multi=crew.length>1;
+      const nameLine = e.person;
+      const share = multi ? fmtH(d/crew.length)+" h p.P." : "gefahren";
+      const sub = multi ? `${fmtDate(e.date)} · ${fmtH(e.start_h)} → ${fmtH(e.end_h)} h · ${crew.length} an Bord`
+                        : `${fmtDate(e.date)} · ${fmtH(e.start_h)} → ${fmtH(e.end_h)} h`;
       return `<div class="entry"><div class="badge trip">🚤</div>
-        <div class="body"><div class="top">${e.person}</div>
-        <div class="meta">${fmtDate(e.date)} · ${fmtH(e.start_h)} → ${fmtH(e.end_h)} h</div></div>
-        <div class="amt"><div class="big">${fmtH(d)} h</div><div class="small">gefahren</div></div>
+        <div class="body"><div class="top">${nameLine}</div>
+        <div class="meta">${sub}</div></div>
+        <div class="amt"><div class="big">${fmtH(d)} h</div><div class="small">${share}</div></div>
         <button class="del" onclick="delEntry('${e.id}')">×</button></div>`;
     } else {
       return `<div class="entry"><div class="badge fuel">⛽</div>
@@ -392,12 +437,23 @@ function renderLog(){
     }
   }).join("");
 }
+function parsePeople(personField){
+  // "Pavlo, Moritz" -> ["Pavlo","Moritz"]; einzelne Person bleibt einzeln
+  return String(personField||"").split(",").map(s=>s.trim()).filter(Boolean);
+}
 function compute(){
   const hours={},paid={}; CREW.forEach(p=>{hours[p]=0;paid[p]=0;});
   let totalH=0,totalE=0,totalL=0;
   entries.forEach(e=>{
-    if(e.type==="trip"){ const d=e.end_h-e.start_h; hours[e.person]=(hours[e.person]||0)+d; totalH+=d; }
-    else { paid[e.person]=(paid[e.person]||0)+e.eur; totalE+=e.eur; totalL+=(e.liter||0); }
+    if(e.type==="trip"){
+      const d=e.end_h-e.start_h;
+      const crew=parsePeople(e.person);
+      const share = crew.length>0 ? d/crew.length : d;  // gleichmäßig teilen
+      crew.forEach(p=>{ hours[p]=(hours[p]||0)+share; });
+      totalH+=d;
+    } else {
+      paid[e.person]=(paid[e.person]||0)+e.eur; totalE+=e.eur; totalL+=(e.liter||0);
+    }
   });
   const costPerH = totalH>0? totalE/totalH : 0;
   const balance={}; CREW.forEach(p=>balance[p]=paid[p]-hours[p]*costPerH);
@@ -435,7 +491,7 @@ function settleText(balance){
   }
   return lines.join("");
 }
-function renderAll(){ renderMeter(); renderLog(); renderSettle(); }
+function renderAll(){ renderMeter(); renderLog(); renderSettle(); syncStartFromMeter(false); }
 
 function setSync(live){
   liveOk=live; const d=$("syncDot"), t=$("syncTxt");
@@ -459,8 +515,9 @@ async function boot(){
   });
   document.querySelectorAll("#typeToggle .pill").forEach(p=>p.onclick=()=>setType(p.dataset.type));
   $("hEnd").addEventListener("input",recalcTrip);
-  $("hStart").addEventListener("input",recalcTrip);
+  $("hStart").addEventListener("input",()=>{ $("hStart").dataset.touched="1"; recalcTrip(); });
   $("saveBtn").onclick=save;
+  $("refreshBtn").onclick=refresh;
 
   try {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -476,6 +533,22 @@ async function boot(){
   } catch(err){
     console.error(err); setSync(false); toast("⚠ Verbindung fehlgeschlagen – Keys prüfen");
   }
+
+  // Beim Wieder-in-den-Vordergrund-Holen automatisch frische Daten laden
+  document.addEventListener("visibilitychange",()=>{
+    if(document.visibilityState==="visible" && sb){ refresh(true); }
+  });
+}
+
+/* ---------- manuelles / automatisches Aktualisieren ---------- */
+async function refresh(silent){
+  if(!sb) return;
+  const btn=$("refreshBtn");
+  if(btn){ btn.classList.remove("spin"); void btn.offsetWidth; btn.classList.add("spin"); }
+  try{
+    await loadEntries(); renderAll(); setSync(true);
+    if(!silent) toast("✓ Aktualisiert");
+  }catch(e){ setSync(false); if(!silent) toast("⚠ Aktualisieren fehlgeschlagen"); }
 }
 
 /* ---------- service worker for PWA ---------- */
