@@ -68,11 +68,11 @@
   .brand .sub { font-size:10.5px; letter-spacing:3px; text-transform:uppercase; color:var(--brass-bright);
     margin-top:7px; font-family:'Space Mono',monospace; opacity:0.9; }
   .meter { margin-top:24px; background:rgba(255,255,255,0.09); border:1px solid rgba(255,119,189,0.4);
-    border-radius:16px; padding:15px 18px; display:flex; justify-content:space-between; align-items:center;
+    border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; gap:8px;
     position:relative; z-index:2; backdrop-filter:blur(4px); }
-  .meter .label { font-size:10.5px; text-transform:uppercase; letter-spacing:2px; color:rgba(255,240,248,0.7); font-family:'Space Mono',monospace; }
-  .meter .val { font-size:32px; font-weight:800; color:#fff; }
-  .meter .val small { font-size:14px; color:var(--brass-bright); font-weight:500; }
+  .meter .label { font-size:10.5px; text-transform:uppercase; letter-spacing:2px; color:rgba(255,240,248,0.7); font-family:'Space Mono',monospace; line-height:1.4; }
+  .meter .val { font-size:38px; font-weight:800; color:#fff; line-height:1; display:flex; align-items:baseline; gap:6px; }
+  .meter .val small { font-size:16px; color:var(--brass-bright); font-weight:600; }
 
   nav.tabs { display:flex; background:var(--navy-deep); position:sticky; top:0; z-index:40; border-bottom:1px solid rgba(255,119,189,0.25); }
   nav.tabs button { flex:1; background:none; border:none; color:rgba(255,240,248,0.55);
@@ -238,8 +238,8 @@ const APP_HTML = `
     </button>
   </div>
   <div class="meter">
-    <div><div class="label">Aktueller Betriebsstundenzähler</div></div>
-    <div class="val" id="meterVal">–<small> h</small></div>
+    <div class="label">Aktueller Betriebsstundenzähler</div>
+    <div class="val" id="meterVal">–<small>h</small></div>
   </div>
 </header>
 <nav class="tabs">
@@ -410,7 +410,7 @@ async function save(){
 }
 
 /* ---------- render ---------- */
-function renderMeter(){ const m=lastMeter(); $("meterVal").innerHTML = m? fmtH(m)+'<small> h</small>':'–<small> h</small>'; }
+function renderMeter(){ const m=lastMeter(); $("meterVal").innerHTML = m? fmtH(m)+'<small>h</small>':'–<small>h</small>'; }
 function renderLog(){
   const host=$("logList");
   if(!entries.length){ host.innerHTML='<div class="empty"><div class="big">🌊</div>Noch keine Einträge.<br>Leg los mit der ersten Fahrt!</div>'; return; }
