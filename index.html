@@ -221,7 +221,7 @@ const APP_HTML = `
       <div class="pills" id="skipperPills"></div>
       <div id="tripFields">
         <div class="row">
-          <div><label>Start (h)</label><input type="number" inputmode="decimal" id="hStart" step="0.1" readonly></div>
+          <div><label>Start (h)</label><input type="number" inputmode="decimal" id="hStart" step="0.1"></div>
           <div><label>Ende (h)</label><input type="number" inputmode="decimal" id="hEnd" step="0.1" placeholder="z.B. 247.5"></div>
         </div>
         <div id="tripCalc" class="note info" style="display:none"></div>
@@ -276,7 +276,12 @@ function setType(t){
   $("addHint").textContent = t==="trip"
     ? "Zählerstand am Ende der Fahrt eintragen – der Rest rechnet sich selbst."
     : "Wer hat getankt und wie viel bezahlt? Das ist sein Guthaben.";
-  if(t==="trip"){ $("hStart").value=fmtPlain(lastMeter()); recalcTrip(); }
+  if(t==="trip"){
+    const m=lastMeter();
+    if(m>0){ $("hStart").value=fmtPlain(m); $("hStart").placeholder=""; }
+    else { $("hStart").value=""; $("hStart").placeholder="z.B. 312 (akt. Motorstand)"; }
+    recalcTrip();
+  }
 }
 function recalcTrip(){
   const s=parseFloat($("hStart").value)||0, e=parseFloat($("hEnd").value), box=$("tripCalc");
@@ -426,6 +431,7 @@ async function boot(){
   });
   document.querySelectorAll("#typeToggle .pill").forEach(p=>p.onclick=()=>setType(p.dataset.type));
   $("hEnd").addEventListener("input",recalcTrip);
+  $("hStart").addEventListener("input",recalcTrip);
   $("saveBtn").onclick=save;
 
   try {
