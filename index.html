@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>BoobLog</title>
+
+<!-- ===== PWA ===== -->
+<meta name="theme-color" content="#0a2e3d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BoobLog">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Space+Mono:wght@400;700&family=Yellowtail&display=swap" rel="stylesheet">
+
+<!-- ===== Supabase JS ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  :root {
+    --navy: #0a2e3d; --navy-deep: #061f29; --teal: #1a5d6e;
+    --foam: #e8f1f2; --sand: #f4ede0; --brass: #c8a35b; --brass-bright: #e0b96a;
+    --coral: #d96b5a; --green: #5a9e7a; --paper: #fbf8f1; --ink: #0a2e3d;
+    --line: rgba(10,46,61,0.12); --shadow: 0 8px 30px rgba(6,31,41,0.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { overscroll-behavior-y:none; }
+  body {
+    font-family:'Fraunces',Georgia,serif; background:var(--paper); color:var(--ink);
+    min-height:100vh;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(26,93,110,0.06), transparent 40%),
+      radial-gradient(circle at 88% 92%, rgba(200,163,91,0.07), transparent 45%);
+    padding-top: env(safe-area-inset-top);
+  }
+  .mono { font-family:'Space Mono',monospace; }
+
+  header {
+    background:linear-gradient(160deg,var(--navy) 0%,var(--navy-deep) 100%);
+    color:var(--foam); padding:22px 20px 30px; position:relative; overflow:hidden;
+    border-bottom:3px solid var(--brass);
+  }
+  header::after { content:""; position:absolute; left:0; right:0; bottom:-1px; height:18px;
+    background:repeating-linear-gradient(90deg,transparent 0 14px,rgba(232,241,242,0.08) 14px 16px); }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .anchor { width:38px; height:38px; flex-shrink:0; border:2px solid var(--brass); border-radius:50%;
+    display:grid; place-items:center; color:var(--brass-bright); font-size:20px; }
+  .brand h1 { font-family:'Yellowtail',cursive; font-size:34px; font-weight:400; letter-spacing:0.5px; line-height:1; color:var(--brass-bright); padding-bottom:2px; }
+  .brand .sub { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--brass); margin-top:4px; font-family:'Space Mono',monospace; }
+  .meter { margin-top:22px; background:rgba(232,241,242,0.07); border:1px solid rgba(200,163,91,0.25);
+    border-radius:14px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .meter .label { font-size:11px; text-transform:uppercase; letter-spacing:2px; color:rgba(232,241,242,0.6); font-family:'Space Mono',monospace; }
+  .meter .val { font-size:30px; font-weight:700; color:var(--brass-bright); }
+  .meter .val small { font-size:14px; color:rgba(232,241,242,0.5); font-weight:400; }
+
+  nav.tabs { display:flex; background:var(--navy-deep); position:sticky; top:0; z-index:40; border-bottom:1px solid rgba(200,163,91,0.2); }
+  nav.tabs button { flex:1; background:none; border:none; color:rgba(232,241,242,0.55);
+    font-family:'Space Mono',monospace; font-size:12px; letter-spacing:1px; padding:14px 4px;
+    cursor:pointer; position:relative; text-transform:uppercase; transition:color 0.2s; }
+  nav.tabs button.active { color:var(--brass-bright); }
+  nav.tabs button.active::after { content:""; position:absolute; bottom:0; left:20%; right:20%; height:3px; background:var(--brass); border-radius:3px 3px 0 0; }
+
+  main { padding:20px 16px 120px; max-width:560px; margin:0 auto; }
+  .view { display:none; animation:fade 0.35s ease; }
+  .view.active { display:block; }
+  @keyframes fade { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+
+  .card { background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:var(--shadow); margin-bottom:16px; }
+  .card h2 { font-size:19px; font-weight:600; margin-bottom:4px; letter-spacing:-0.3px; }
+  .card .hint { font-size:13px; color:var(--teal); opacity:0.8; margin-bottom:16px; }
+
+  label { display:block; font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--teal); font-family:'Space Mono',monospace; margin-bottom:7px; }
+  input, select { width:100%; padding:13px 14px; border:1.5px solid var(--line); border-radius:11px; background:#fff;
+    font-family:'Fraunces',serif; font-size:17px; color:var(--ink); margin-bottom:16px; transition:border 0.2s, box-shadow 0.2s; }
+  input:focus, select:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(26,93,110,0.12); }
+  .row { display:flex; gap:12px; } .row > div { flex:1; }
+
+  .pills { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; }
+  .pill { padding:10px 15px; border:1.5px solid var(--line); border-radius:30px; background:#fff;
+    font-family:'Space Mono',monospace; font-size:13px; cursor:pointer; transition:all 0.18s; }
+  .pill.sel { background:var(--navy); color:var(--foam); border-color:var(--navy); transform:translateY(-1px); }
+
+  button.go { width:100%; padding:16px; border:none; border-radius:12px; cursor:pointer;
+    background:linear-gradient(135deg,var(--brass-bright),var(--brass)); color:var(--navy-deep);
+    font-family:'Space Mono',monospace; font-weight:700; font-size:14px; letter-spacing:1px; text-transform:uppercase;
+    box-shadow:0 6px 18px rgba(200,163,91,0.4); transition:transform 0.15s, box-shadow 0.15s; }
+  button.go:active { transform:scale(0.98); }
+  button.go:disabled { opacity:0.45; box-shadow:none; cursor:not-allowed; }
+
+  .note { font-size:12.5px; padding:11px 13px; border-radius:10px; margin-bottom:14px; line-height:1.5; font-family:'Space Mono',monospace; }
+  .note.warn { background:rgba(217,107,90,0.12); color:#a8412f; border:1px solid rgba(217,107,90,0.3); }
+  .note.ok { background:rgba(90,158,122,0.12); color:#3a7256; border:1px solid rgba(90,158,122,0.3); }
+  .note.info { background:rgba(26,93,110,0.08); color:var(--teal); border:1px solid rgba(26,93,110,0.2); }
+
+  .entry { display:flex; align-items:center; gap:13px; padding:14px 4px; border-bottom:1px dashed var(--line); }
+  .entry:last-child { border-bottom:none; }
+  .badge { width:42px; height:42px; border-radius:11px; flex-shrink:0; display:grid; place-items:center; font-size:19px; font-family:'Space Mono',monospace; font-weight:700; }
+  .badge.trip { background:rgba(26,93,110,0.13); color:var(--teal); }
+  .badge.fuel { background:rgba(200,163,91,0.18); color:#9c7d34; }
+  .entry .body { flex:1; min-width:0; }
+  .entry .body .top { font-size:16px; font-weight:600; }
+  .entry .body .meta { font-size:12px; color:var(--teal); opacity:0.75; font-family:'Space Mono',monospace; margin-top:2px; }
+  .entry .amt { text-align:right; font-family:'Space Mono',monospace; flex-shrink:0; }
+  .entry .amt .big { font-size:16px; font-weight:700; }
+  .entry .amt .small { font-size:11px; color:var(--teal); opacity:0.7; }
+  .del { background:none; border:none; color:var(--coral); font-size:19px; cursor:pointer; padding:4px 8px; opacity:0.5; }
+  .del:active { opacity:1; }
+
+  .empty { text-align:center; padding:40px 20px; color:var(--teal); opacity:0.6; }
+  .empty .big { font-size:38px; margin-bottom:8px; }
+
+  .person-bar { margin-bottom:14px; }
+  .person-bar .top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .person-bar .name { font-size:16px; font-weight:600; }
+  .person-bar .hrs { font-family:'Space Mono',monospace; font-size:13px; color:var(--teal); }
+  .bar-track { height:10px; background:rgba(26,93,110,0.1); border-radius:6px; overflow:hidden; }
+  .bar-fill { height:100%; background:linear-gradient(90deg,var(--teal),var(--brass)); border-radius:6px; transition:width 0.5s; }
+  .balance { display:flex; justify-content:space-between; align-items:center; padding:13px 0; border-bottom:1px solid var(--line); }
+  .balance:last-child { border-bottom:none; }
+  .balance .name { font-size:16px; font-weight:600; }
+  .balance .sub { font-size:11px; font-family:'Space Mono',monospace; color:var(--teal); opacity:0.7; }
+  .balance .num { font-family:'Space Mono',monospace; font-weight:700; font-size:17px; }
+  .num.pos { color:var(--green); } .num.neg { color:var(--coral); }
+  .settle-line { font-family:'Space Mono',monospace; font-size:14px; padding:11px 13px; background:rgba(26,93,110,0.06); border-radius:10px; margin-bottom:9px; line-height:1.5; }
+  .settle-line b { color:var(--coral); } .settle-line i { color:var(--green); font-style:normal; }
+
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:4px; }
+  .stat { background:rgba(26,93,110,0.05); border-radius:12px; padding:14px; }
+  .stat .k { font-size:10.5px; text-transform:uppercase; letter-spacing:1.5px; font-family:'Space Mono',monospace; color:var(--teal); }
+  .stat .v { font-size:25px; font-weight:700; margin-top:4px; }
+  .stat .v small { font-size:13px; font-weight:400; opacity:0.6; }
+
+  .sync-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); margin-right:6px; }
+  .sync-dot.live { animation:pulse 2s infinite; }
+  .sync-dot.off { background:var(--coral); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .footnote { text-align:center; font-size:11px; font-family:'Space Mono',monospace; color:var(--teal); opacity:0.55; margin-top:8px; padding:0 10px; line-height:1.6; }
+
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+    background:var(--navy); color:var(--foam); padding:14px 22px; border-radius:30px;
+    font-family:'Space Mono',monospace; font-size:13px; box-shadow:var(--shadow); z-index:100;
+    transition:transform 0.3s; border:1px solid var(--brass); max-width:90%; text-align:center; }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+
+  /* setup screen when keys missing */
+  .setup { padding:40px 24px; max-width:520px; margin:0 auto; }
+  .setup h2 { font-size:22px; margin-bottom:12px; }
+  .setup p, .setup li { font-size:14px; line-height:1.6; color:var(--teal); }
+  .setup code { background:var(--navy); color:var(--brass-bright); padding:2px 7px; border-radius:5px; font-family:'Space Mono',monospace; font-size:12px; word-break:break-all; }
+  .setup ol { margin:16px 0 0 20px; } .setup li { margin-bottom:10px; }
+  .splash { text-align:center; padding:70px 20px; font-family:'Space Mono',monospace; color:var(--teal); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================= -->
+<!--  ⚙️  KONFIGURATION – HIER DEINE 2 SUPABASE-WERTE EINTRAGEN     -->
+<!-- ============================================================= -->
+<script>
+  const SUPABASE_URL  = "https://xngcnmomhdwltaoxxiqk.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuZ2NubW9taGR3bHRhb3h4aXFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MDE3NjQsImV4cCI6MjA5NTI3Nzc2NH0.jHlCbV_2-h3df7alk3fzLPsBTvn5YrZf54Ekv_EUYQk";
+</script>
+<!-- ============================================================= -->
+
+<div id="app"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CREW = ["Pavlo","Moritz","David","Jonas","Philipp"];
+let sb = null;
+let entries = [];
+let curType = "trip";
+let curPerson = CREW[0];
+let liveOk = false;
+
+const $ = id => document.getElementById(id);
+const fmtH = n => (Math.round(n*10)/10).toLocaleString("de-DE",{minimumFractionDigits:1,maximumFractionDigits:1});
+const fmtE = n => n.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2400); }
+function fmtDate(d){ const p=String(d).slice(0,10).split("-"); return p.length===3?`${p[2]}.${p[1]}.${p[0].slice(2)}`:d; }
+function fmtPlain(n){ return n ? (Math.round(n*10)/10) : 0; }
+
+/* ---------- check config ---------- */
+function configured(){
+  return SUPABASE_URL && SUPABASE_ANON
+    && !SUPABASE_URL.includes("HIER_") && !SUPABASE_ANON.includes("HIER_");
+}
+
+/* ---------- the full UI markup ---------- */
+const APP_HTML = `
+<header>
+  <div class="brand">
+    <div class="anchor">⚓</div>
+    <div><h1>BoobLog</h1><div class="sub">Draco 1800 ST · Crew of 5</div></div>
+  </div>
+  <div class="meter">
+    <div><div class="label">Aktueller Betriebsstundenzähler</div></div>
+    <div class="val" id="meterVal">–<small> h</small></div>
+  </div>
+</header>
+<nav class="tabs">
+  <button class="tab active" data-view="add">+ Eintrag</button>
+  <button class="tab" data-view="log">Logbuch</button>
+  <button class="tab" data-view="settle">Abrechnung</button>
+</nav>
+<main>
+  <section class="view active" id="view-add">
+    <div class="card">
+      <h2 id="addTitle">Neue Fahrt</h2>
+      <div class="hint" id="addHint">Zählerstand am Ende der Fahrt eintragen – der Rest rechnet sich selbst.</div>
+      <div class="pills" id="typeToggle">
+        <div class="pill sel" data-type="trip">🚤 Fahrt</div>
+        <div class="pill" data-type="fuel">⛽ Getankt</div>
+      </div>
+      <label>Wer?</label>
+      <div class="pills" id="skipperPills"></div>
+      <div id="tripFields">
+        <div class="row">
+          <div><label>Start (h)</label><input type="number" inputmode="decimal" id="hStart" step="0.1" readonly></div>
+          <div><label>Ende (h)</label><input type="number" inputmode="decimal" id="hEnd" step="0.1" placeholder="z.B. 247.5"></div>
+        </div>
+        <div id="tripCalc" class="note info" style="display:none"></div>
+      </div>
+      <div id="fuelFields" style="display:none">
+        <div class="row">
+          <div><label>Liter</label><input type="number" inputmode="decimal" id="fLiter" step="0.1" placeholder="z.B. 60"></div>
+          <div><label>Summe €</label><input type="number" inputmode="decimal" id="fEur" step="0.01" placeholder="z.B. 105.00"></div>
+        </div>
+      </div>
+      <label>Datum</label>
+      <input type="date" id="dDate">
+      <button class="go" id="saveBtn">Eintragen</button>
+    </div>
+    <div class="footnote"><span class="sync-dot" id="syncDot"></span><span id="syncTxt">Verbinde…</span></div>
+  </section>
+  <section class="view" id="view-log">
+    <div class="card"><h2>Logbuch</h2><div class="hint">Alle Fahrten & Tankfüllungen – für die ganze Crew.</div><div id="logList"></div></div>
+  </section>
+  <section class="view" id="view-settle">
+    <div class="card"><h2>Übersicht</h2><div class="hint">Stand der gesamten Saison.</div><div class="stat-grid" id="statGrid"></div></div>
+    <div class="card"><h2>Stunden pro Person</h2><div class="hint">Wer wie viel gefahren ist.</div><div id="hoursBars"></div></div>
+    <div class="card"><h2>Kontostand</h2><div class="hint"><span class="num pos">Grün</span> = bekommt Geld zurück, <span class="num neg">Rot</span> = zahlt.</div><div id="balances"></div></div>
+    <div class="card"><h2>Ausgleich</h2><div class="hint">So wird's glatt – minimale Überweisungen.</div><div id="settlement"></div></div>
+  </section>
+</main>`;
+
+/* ---------- setup screen (keys missing) ---------- */
+const SETUP_HTML = `
+<header><div class="brand"><div class="anchor">⚓</div><div><h1>BoobLog</h1><div class="sub">Einrichtung</div></div></div></header>
+<div class="setup">
+  <h2>Fast fertig ⚓</h2>
+  <p>Die App braucht noch die Verbindung zu eurer gemeinsamen Datenbank. Trage in der Datei <code>index.html</code> ganz oben deine zwei Supabase-Werte ein:</p>
+  <ol>
+    <li><code>SUPABASE_URL</code> – die Projekt-URL</li>
+    <li><code>SUPABASE_ANON</code> – der öffentliche „anon"-Key</li>
+  </ol>
+  <p style="margin-top:18px">Beide findest du im Supabase-Dashboard unter <b>Project Settings → API</b>. Die genaue Schritt-für-Schritt-Anleitung liegt der App bei (ANLEITUNG.md).</p>
+</div>`;
+
+/* ---------- type toggle ---------- */
+function lastMeter(){
+  const t = entries.filter(e=>e.type==="trip").sort((a,b)=>a.end_h-b.end_h);
+  return t.length ? t[t.length-1].end_h : 0;
+}
+function setType(t){
+  curType=t;
+  document.querySelectorAll("#typeToggle .pill").forEach(p=>p.classList.toggle("sel",p.dataset.type===t));
+  $("tripFields").style.display = t==="trip"?"block":"none";
+  $("fuelFields").style.display = t==="fuel"?"block":"none";
+  $("addTitle").textContent = t==="trip"?"Neue Fahrt":"Getankt";
+  $("addHint").textContent = t==="trip"
+    ? "Zählerstand am Ende der Fahrt eintragen – der Rest rechnet sich selbst."
+    : "Wer hat getankt und wie viel bezahlt? Das ist sein Guthaben.";
+  if(t==="trip"){ $("hStart").value=fmtPlain(lastMeter()); recalcTrip(); }
+}
+function recalcTrip(){
+  const s=parseFloat($("hStart").value)||0, e=parseFloat($("hEnd").value), box=$("tripCalc");
+  if(isNaN(e)){ box.style.display="none"; return; }
+  const d=e-s; box.style.display="block";
+  if(d<=0){ box.className="note warn"; box.textContent="⚠ Endstand muss größer als Start ("+fmtH(s)+" h) sein."; }
+  else { box.className="note info"; box.textContent="Diese Fahrt: "+fmtH(d)+" Motorstunden."; }
+}
+function buildPills(){
+  const host=$("skipperPills");
+  host.innerHTML=CREW.map((p,i)=>`<div class="pill ${i===0?'sel':''}" data-person="${p}">${p}</div>`).join("");
+  host.querySelectorAll(".pill").forEach(pl=>pl.onclick=()=>{
+    host.querySelectorAll(".pill").forEach(x=>x.classList.remove("sel"));
+    pl.classList.add("sel"); curPerson=pl.dataset.person;
+  });
+}
+
+/* ---------- DATA: Supabase ---------- */
+async function loadEntries(){
+  const { data, error } = await sb.from("entries").select("*").order("date",{ascending:false}).order("created_at",{ascending:false});
+  if(error){ toast("⚠ Laden fehlgeschlagen"); console.error(error); return; }
+  entries = data || [];
+}
+async function addTrip(person,start,end,date){
+  const { error } = await sb.from("entries").insert({ type:"trip", person, start_h:start, end_h:end, date });
+  if(error){ toast("⚠ Speichern fehlgeschlagen"); console.error(error); return false; }
+  return true;
+}
+async function addFuel(person,liter,eur,date){
+  const { error } = await sb.from("entries").insert({ type:"fuel", person, liter, eur, date });
+  if(error){ toast("⚠ Speichern fehlgeschlagen"); console.error(error); return false; }
+  return true;
+}
+async function delEntry(id){
+  const { error } = await sb.from("entries").delete().eq("id",id);
+  if(error){ toast("⚠ Löschen fehlgeschlagen"); return; }
+  await loadEntries(); renderAll(); toast("Eintrag gelöscht");
+}
+window.delEntry = delEntry;
+
+/* ---------- save ---------- */
+async function save(){
+  const date=$("dDate").value || new Date().toISOString().slice(0,10);
+  $("saveBtn").disabled=true;
+  let ok=false;
+  if(curType==="trip"){
+    const s=parseFloat($("hStart").value)||0, e=parseFloat($("hEnd").value);
+    if(isNaN(e)||e<=s){ toast("Bitte gültigen Endstand eingeben"); $("saveBtn").disabled=false; return; }
+    ok=await addTrip(curPerson,s,e,date);
+    if(ok) toast("🚤 Fahrt gespeichert");
+  } else {
+    const l=parseFloat($("fLiter").value)||0, eur=parseFloat($("fEur").value);
+    if(isNaN(eur)||eur<=0){ toast("Bitte Betrag eingeben"); $("saveBtn").disabled=false; return; }
+    ok=await addFuel(curPerson,l,eur,date);
+    if(ok) toast("⛽ Tankfüllung gespeichert");
+  }
+  $("saveBtn").disabled=false;
+  if(ok){ $("hEnd").value=""; $("fLiter").value=""; $("fEur").value=""; await loadEntries(); renderAll(); setType(curType); }
+}
+
+/* ---------- render ---------- */
+function renderMeter(){ const m=lastMeter(); $("meterVal").innerHTML = m? fmtH(m)+'<small> h</small>':'–<small> h</small>'; }
+function renderLog(){
+  const host=$("logList");
+  if(!entries.length){ host.innerHTML='<div class="empty"><div class="big">🌊</div>Noch keine Einträge.<br>Leg los mit der ersten Fahrt!</div>'; return; }
+  host.innerHTML=entries.map(e=>{
+    if(e.type==="trip"){
+      const d=e.end_h-e.start_h;
+      return `<div class="entry"><div class="badge trip">🚤</div>
+        <div class="body"><div class="top">${e.person}</div>
+        <div class="meta">${fmtDate(e.date)} · ${fmtH(e.start_h)} → ${fmtH(e.end_h)} h</div></div>
+        <div class="amt"><div class="big">${fmtH(d)} h</div><div class="small">gefahren</div></div>
+        <button class="del" onclick="delEntry('${e.id}')">×</button></div>`;
+    } else {
+      return `<div class="entry"><div class="badge fuel">⛽</div>
+        <div class="body"><div class="top">${e.person}</div>
+        <div class="meta">${fmtDate(e.date)} · ${e.liter? fmtH(e.liter)+' L':'getankt'}</div></div>
+        <div class="amt"><div class="big">${fmtE(e.eur)} €</div><div class="small">bezahlt</div></div>
+        <button class="del" onclick="delEntry('${e.id}')">×</button></div>`;
+    }
+  }).join("");
+}
+function compute(){
+  const hours={},paid={}; CREW.forEach(p=>{hours[p]=0;paid[p]=0;});
+  let totalH=0,totalE=0,totalL=0;
+  entries.forEach(e=>{
+    if(e.type==="trip"){ const d=e.end_h-e.start_h; hours[e.person]=(hours[e.person]||0)+d; totalH+=d; }
+    else { paid[e.person]=(paid[e.person]||0)+e.eur; totalE+=e.eur; totalL+=(e.liter||0); }
+  });
+  const costPerH = totalH>0? totalE/totalH : 0;
+  const balance={}; CREW.forEach(p=>balance[p]=paid[p]-hours[p]*costPerH);
+  return {hours,paid,balance,totalH,totalE,totalL,costPerH};
+}
+function renderSettle(){
+  const c=compute();
+  $("statGrid").innerHTML=`
+    <div class="stat"><div class="k">Gesamt gefahren</div><div class="v">${fmtH(c.totalH)}<small> h</small></div></div>
+    <div class="stat"><div class="k">Sprit gesamt</div><div class="v">${fmtE(c.totalE)}<small> €</small></div></div>
+    <div class="stat"><div class="k">Getankt</div><div class="v">${fmtH(c.totalL)}<small> L</small></div></div>
+    <div class="stat"><div class="k">Kosten / Stunde</div><div class="v">${fmtE(c.costPerH)}<small> €</small></div></div>`;
+  const maxH=Math.max(0.1,...CREW.map(p=>c.hours[p]));
+  const bars=CREW.filter(p=>c.hours[p]>0).map(p=>`
+    <div class="person-bar"><div class="top"><span class="name">${p}</span><span class="hrs">${fmtH(c.hours[p])} h</span></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${c.hours[p]/maxH*100}%"></div></div></div>`).join("");
+  $("hoursBars").innerHTML = bars || '<div class="empty">Noch keine Fahrten.</div>';
+  $("balances").innerHTML=CREW.map(p=>{
+    const b=c.balance[p], cls=b>=0.005?"pos":(b<=-0.005?"neg":""), sign=b>0?"+":"";
+    return `<div class="balance"><div><div class="name">${p}</div>
+      <div class="sub">${fmtH(c.hours[p])} h · ${fmtE(c.paid[p])} € getankt</div></div>
+      <div class="num ${cls}">${sign}${fmtE(b)} €</div></div>`;
+  }).join("");
+  $("settlement").innerHTML=settleText(c.balance);
+}
+function settleText(balance){
+  const D=CREW.map(p=>({p,v:balance[p]})).filter(x=>x.v<-0.005).map(x=>({p:x.p,v:-x.v})).sort((a,b)=>b.v-a.v);
+  const C=CREW.map(p=>({p,v:balance[p]})).filter(x=>x.v>0.005).sort((a,b)=>b.v-a.v);
+  if(!D.length) return '<div class="note ok">✓ Alles ausgeglichen – niemand schuldet etwas.</div>';
+  const lines=[]; let i=0,j=0;
+  while(i<D.length && j<C.length){
+    const amt=Math.min(D[i].v,C[j].v);
+    lines.push(`<div class="settle-line"><b>${D[i].p}</b> → <i>${C[j].p}</i><b style="float:right">${fmtE(amt)} €</b></div>`);
+    D[i].v-=amt; C[j].v-=amt; if(D[i].v<0.005)i++; if(C[j].v<0.005)j++;
+  }
+  return lines.join("");
+}
+function renderAll(){ renderMeter(); renderLog(); renderSettle(); }
+
+function setSync(live){
+  liveOk=live; const d=$("syncDot"), t=$("syncTxt");
+  if(!d) return;
+  if(live){ d.className="sync-dot live"; t.textContent="Live verbunden – Crew sieht denselben Stand."; }
+  else { d.className="sync-dot off"; t.textContent="Offline – Änderungen evtl. nicht synchron."; }
+}
+
+/* ---------- boot ---------- */
+async function boot(){
+  if(!configured()){ $("app").innerHTML=SETUP_HTML; return; }
+  $("app").innerHTML=APP_HTML;
+
+  buildPills(); setType("trip");
+  $("dDate").value=new Date().toISOString().slice(0,10);
+  document.querySelectorAll("nav.tabs .tab").forEach(b=>b.onclick=()=>{
+    document.querySelectorAll("nav.tabs .tab").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+    b.classList.add("active"); $("view-"+b.dataset.view).classList.add("active");
+    if(b.dataset.view==="settle") renderSettle();
+  });
+  document.querySelectorAll("#typeToggle .pill").forEach(p=>p.onclick=()=>setType(p.dataset.type));
+  $("hEnd").addEventListener("input",recalcTrip);
+  $("saveBtn").onclick=save;
+
+  try {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    await loadEntries();
+    renderAll();
+    setSync(true);
+    // realtime: refresh whenever anyone changes the table
+    sb.channel("entries-changes")
+      .on("postgres_changes",{event:"*",schema:"public",table:"entries"},async()=>{
+        await loadEntries(); renderAll();
+      })
+      .subscribe(status=>{ if(status==="SUBSCRIBED") setSync(true); });
+  } catch(err){
+    console.error(err); setSync(false); toast("⚠ Verbindung fehlgeschlagen – Keys prüfen");
+  }
+}
+
+/* ---------- service worker for PWA ---------- */
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+
+boot();
+</script>
+</body>
+</html>
